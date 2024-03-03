@@ -104,7 +104,7 @@ with tf.compat.v1.Session() as sess:
         if (i != 0) and i % display_step == 0:
             x_cost, y_cost = cost_batch.next_batch([X_train, y_train])
             c_train = sess.run(cost, feed_dict={seq_in: x_cost, seq_out: y_cost, keep_prob: 1.0})
-            print('{} {}. c_train={}'.format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),i, c_train))
+            print('{} . c_train={}, n_iteration : {}/{}'.format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), c_train,i, n_iterations))
             sys.stdout.flush()
             saver.save(sess, model_path, global_step=i)
         sess.run(train_step, feed_dict={seq_in: x_batch, seq_out: y_batch, keep_prob: 0.8})

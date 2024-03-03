@@ -1,6 +1,9 @@
 import sys
 import os
 import logging
+from typing import Dict
+
+import requests
 
 # Set logging level to suppress warnings
 logging.getLogger().setLevel(logging.ERROR)
@@ -36,9 +39,17 @@ bbabid = False
 
 SEATS = ['North', 'East', 'South', 'West']
 
+VULNERABILITIES = {
+            'None': [False, False],
+            'N-S': [True, False],
+            'E-W': [False, True],
+            'Both': [True, True]
+        }
+VULS_REVERSE = {tuple(v): k for k, v in VULNERABILITIES.items()}
+
 class TMClient:
 
-    def __init__(self, name, seat, models, sampler, verbose):
+    def __init__(self, name, seat, models, sampler, verbose,lia_bidding=False,lia_leading=False):
         self.name = name
         self.seat = seat
         self.player_i = SEATS.index(self.seat)
@@ -54,6 +65,8 @@ class TMClient:
         self.deal_str = None
         self.trick_winners = None
         self.opponents = None
+        self.lia_bidding = lia_bidding
+        self.lia_leading = lia_leading
 
     @property
     def is_connected(self):
@@ -80,7 +93,16 @@ class TMClient:
         self.bid_responses = []
         self.card_responses = []
 
-        self.dealer_i, self.vuln_ns, self.vuln_ew, self.hand_str = await self.receive_deal()
+        await asyncio.sleep(1)
+        while True :
+            try:
+                self.dealer_i, self.vuln_ns, self.vuln_ew, self.hand_str = (
+                    await self.receive_deal()
+                )
+                print(self.dealer_i, self.vuln_ns, self.vuln_ew, self.hand_str)
+                break
+            except:
+                await asyncio.sleep(1)
 
         auction = await self.bidding(self.sameforboth)
 
@@ -162,6 +184,9 @@ class TMClient:
         else:
             auction = ['PAD_START'] * self.dealer_i
 
+        if self.lia_bidding :
+            return await self.bidding_with_lia(auction)
+
         player_i = self.dealer_i
 
         while not bidding.auction_over(auction):
@@ -186,8 +211,59 @@ class TMClient:
             player_i = (player_i + 1) % 4
 
         return auction
+    
+    async def send_request_to_lia(self, type_of_action: str, data: Dict):
+        # new_ben_called = (open_room and direction in [Direction.NORTH, Direction.SOUTH]) or (
+        #     not open_room and direction in [Direction.EAST, Direction.WEST])
+        port = "http://localhost:{}".format("5002")
+        while True:
+            try:
+                res = requests.post("{}/{}".format(port, type_of_action), json=data)
+                return res.json()
+            except:
+                await asyncio.sleep(1)
+    
+    async def bidding_with_lia(self,auction) :
+        
+
+        player_i = self.dealer_i
+
+        while not bidding.auction_over(auction):
+            await asyncio.sleep(0.01)
+            if player_i == self.player_i:
+                # now it's this player's turn to bid
+                bid_resp = await self.send_request_to_lia(
+                    type_of_action="place_bid",
+                    data={
+                        "hand": self.hand_str,
+                        "dealer": "NESW"[self.dealer_i],
+                        "vuln": VULS_REVERSE[self.vuln_ns, self.vuln_ew],
+                        "auction": [a for a in auction if a != "PAD_START"],
+                        "conventions_ew": (
+                            "TWO_OVER_ONE" if self.seat in ["East","West"] else "TWO_OVER_ONE"
+                        ),
+                        "conventions_ns": (
+                            "TWO_OVER_ONE" if self.seat in ["North","South"] else "TWO_OVER_ONE"
+                        ),
+                    },
+                )
+                bid = bid_resp["bid"].replace("P","PASS").replace("NT","N")
+                await asyncio.sleep(0.01)
+                auction.append(bid)
+                await self.send_own_bid(bid)
+            else:
+                # just wait for the other player's bid
+                bid = await self.receive_bid_for(player_i)
+                auction.append(bid)
+
+            player_i = (player_i + 1) % 4
+
+        print("Auction over")
+        return auction
 
     async def opening_lead(self, auction):
+        if self.lia_leading :
+            return await self.opening_lead_with_lia(auction)
 
         contract = bidding.get_contract(auction)
         decl_i = bidding.get_decl_i(contract)
@@ -219,6 +295,43 @@ class TMClient:
         else:
             # just send that we are ready for the opening lead
             return await self.receive_card_play_for(on_lead_i, 0)
+        
+    async def opening_lead_with_lia(self, auction):
+        contract = bidding.get_contract(auction)
+        decl_i = bidding.get_decl_i(contract)
+        on_lead_i = (decl_i + 1) % 4
+        
+        if self.player_i == on_lead_i:
+            # this player is on lead
+            print(await self.receive_line())
+            data = {
+                "hand": self.hand_str,
+                "dealer": "NESW"[self.dealer_i],
+                "vuln": VULS_REVERSE[self.vuln_ns, self.vuln_ew],
+                "auction": [
+                    a for a in auction if a != "PAD_START"
+                ],
+                "conventions_ew": ("DEFAULT" if self.seat in ["East","West"] else "SEF"),
+                "conventions_ns": (
+                    "DEFAULT" if self.seat in ["North","South"] else "SEF"
+                ),
+            }
+            lead = await self.send_request_to_lia(
+                type_of_action="make_lead",
+                data=data,
+            )
+            lead = lead["card"]
+            # card_symbol = 'D5'
+            print("Lead: ", lead)
+            await asyncio.sleep(0.01)
+            await self.send_card_played(lead)
+            await asyncio.sleep(0.01)
+
+            return lead
+        else:
+            # just send that we are ready for the opening lead
+            return await self.receive_card_play_for(on_lead_i, 0)
+
 
     async def play(self, auction, opening_lead52):
         contract = bidding.get_contract(auction)
@@ -340,7 +453,6 @@ class TMClient:
                     
                     await self.send_card_played(card_resp.card.symbol()) 
 
-                    await asyncio.sleep(0.01)
 
                 else:
                     # another player is on play, we just have to wait for their card
@@ -445,8 +557,6 @@ class TMClient:
             elif leader_i == cardplayer_i:
                 #print("waiting for message for lead")
                 await self.receive_line()
-            # Give player to lead to receive message
-            await asyncio.sleep(0.1)
 
         # play last trick
         trick_i += 1
@@ -469,14 +579,13 @@ class TMClient:
                 )
                 self.card_responses.append(cr)
 
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.5)
                 
                 if player_i == 1 and cardplayer_i == 3:
                     await self.send_card_played_for_dummy(card52_symbol)
                 else:    
                     await self.send_card_played(card52_symbol)
 
-                await asyncio.sleep(0.01)
                 self.card_responses
             else:
                 # someone else is on play. we just have to wait for their card
@@ -650,6 +759,7 @@ class TMClient:
     
     @staticmethod
     def parse_hand(s):
+        print(s)
         return s[s.index(':') + 1 : s.rindex('.')] \
             .replace(' ', '').replace('-', '').replace('S', '').replace('H', '').replace('D', '').replace('C', '')
 
@@ -694,6 +804,7 @@ def validate_ip(ip_str):
     
 def get_execution_path():
     # Get the directory where the program is started from either PyInstaller executable or the script
+    return None
     return os.getcwd()
 
 
@@ -725,7 +836,9 @@ async def main():
     parser.add_argument("--port", type=int, default=2000, help="Port for Table Manager")
     parser.add_argument("--name", required=True, help="Name in Table Manager")
     parser.add_argument("--seat", required=True, help="Where to sit (North, East, South or West)")
-    parser.add_argument("--config", default=f"{base_path}/config/default.conf", help="Filename for configuration")
+    parser.add_argument("--lia_bidding", type=bool,default=False, help="Make Lia bid instead of Ben. Requires a docker image of Lia.")
+    parser.add_argument("--lia_leading", type=bool,default=False, help="Make Lia lead instead of Ben. Requires a docker image of Lia.")
+    parser.add_argument("--config", default=f"{base_path}/src/config/default.conf", help="Filename for configuration")
     parser.add_argument("--biddingonly", type=bool, default=False, help="Only bid, no play")
     parser.add_argument("--verbose", type=bool, default=False, help="Output samples and other information during play")
 
@@ -738,6 +851,8 @@ async def main():
     configfile = args.config
 
     verbose = args.verbose
+    lia_bidding = args.lia_bidding
+    lia_leading = args.lia_leading
     biddingonly = args.biddingonly
 
     np.set_printoptions(precision=2, suppress=True)
@@ -755,9 +870,10 @@ async def main():
             # Default to version 1. of Tensorflow
             from nn.models import Models
 
-    models = Models.from_conf(configuration, base_path.replace(os.path.sep + "src",""))
+    print(configuration)
+    models = Models.from_conf(configuration, "D:\\os_ben")
 
-    client = TMClient(name, seat, models, Sample.from_conf(configuration, verbose), verbose)
+    client = TMClient(name, seat, models, Sample.from_conf(configuration, verbose), verbose,lia_bidding=lia_bidding, lia_leading=lia_leading)
     print(f"Connecting to {host}:{port}")
     await client.connect(host, port)
     first = True
@@ -790,18 +906,7 @@ async def main():
 if __name__ == "__main__":
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(main())
-        loop.run_forever()
-    except KeyboardInterrupt:
-        pass
-    except ValueError as e:
-        print("Error in configuration - typical the models do not match the configuration - include_system ")
-        print(e)
-        sys.exit(0)
-    except Exception as e:
-        print(e)
-        sys.exit(0)
-    finally:
-        loop.close()
+    loop.run_until_complete(main())
+    loop.run_forever()
+    loop.close()
 

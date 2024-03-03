@@ -33,6 +33,10 @@ Run the script to transform the data into binary format. (the first argument is 
 
 ```
 mkdir -p binary/bidding models/bidding
+(For Windows users instead: 
+mkdir binary
+mldir binary/bidding
+)
 
 python bidding_binary.py bidding_data.txt binary/bidding
 ```
@@ -76,7 +80,7 @@ To train a bidding-info model, first transform the data into a binary format.
 ```
 mkdir -p binary/binfo models/binfo
 
-python binfo_binary.py 588735 bidding_data.txt binary/binfo
+python binfo_binary.py bidding_data.txt binary/binfo
 ```
 
 this will create the following files into the `binary/binfo` folder: `X.npy`, `y.npy`, `HCP.npy`, `SHAPE.npy`

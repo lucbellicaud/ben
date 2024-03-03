@@ -45,6 +45,7 @@ class BatchPlayer:
         return softmax(card_logit.reshape((x.shape[0], x.shape[1], 32)), axis=2)
 
     def next_cards_softmax(self, x):
+        print("shape : ",x.shape)
         result = self.model(x)[:,-1,:]
         return result
 
