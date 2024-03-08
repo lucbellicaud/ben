@@ -268,14 +268,11 @@ class Sample:
         if self.verbose:
             print(f"n_samples {n_samples} matching bidding info")
 
-        if (ns != -1):
-            index = 2
-        else:
-            index = 0
+        index = 2
 
-        X_lho = np.zeros((n_samples, n_steps, 159 + index))
-        X_pard = np.zeros((n_samples, n_steps, 159 + index))
-        X_rho = np.zeros((n_samples, n_steps, 159 + index))
+        X_lho = np.zeros((n_samples, n_steps, 161))
+        X_pard = np.zeros((n_samples, n_steps, 161))
+        X_rho = np.zeros((n_samples, n_steps, 161))
 
         X_lho[:, :, :] = A_lho
         X_lho[:, :, 7+index:39+index] = lho_pard_rho[:, 0:1, :]
