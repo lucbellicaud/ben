@@ -29,13 +29,13 @@ import conf
 
 from sample import Sample
 from bidding import bidding
-from sample import Sample
 from deck52 import decode_card
 from bidding.binary import DealData
 from objects import CardResp, Card, BidResp
 from claim import Claimer
 from pbn2ben import load
 from util import calculate_seed
+from pimc.PIMC import BGADLL
 
 def get_execution_path():
     # Get the directory where the program is started from either PyInstaller executable or the script
@@ -317,11 +317,18 @@ class Driver:
         righty_hand = self.hands[(decl_i + 3) % 4]
         decl_hand = self.hands[decl_i]
 
+        if self.models.pimc_use:
+            pimc = BGADLL(self.models.pimc_wait, dummy_hand, decl_hand, contract, is_decl_vuln, self.verbose)
+            if self.verbose:
+                print("PIMC",dummy_hand, decl_hand, contract)
+        else:
+            pimc = None
+
         card_players = [
-            AsyncCardPlayer(self.models, 0, lefty_hand, dummy_hand, contract, is_decl_vuln, self.sampler, self.verbose),
-            AsyncCardPlayer(self.models, 1, dummy_hand, decl_hand, contract, is_decl_vuln, self.sampler, self.verbose),
-            AsyncCardPlayer(self.models, 2, righty_hand, dummy_hand, contract, is_decl_vuln, self.sampler, self.verbose),
-            AsyncCardPlayer(self.models, 3, decl_hand, dummy_hand, contract, is_decl_vuln, self.sampler, self.verbose)
+            AsyncCardPlayer(self.models, 0, lefty_hand, dummy_hand, contract, is_decl_vuln, self.sampler, pimc, self.verbose),
+            AsyncCardPlayer(self.models, 1, dummy_hand, decl_hand, contract, is_decl_vuln, self.sampler, pimc, self.verbose),
+            AsyncCardPlayer(self.models, 2, righty_hand, dummy_hand, contract, is_decl_vuln, self.sampler, pimc, self.verbose),
+            AsyncCardPlayer(self.models, 3, decl_hand, dummy_hand, contract, is_decl_vuln, self.sampler, pimc, self.verbose)
         ]
 
         # check if user is playing and update card players accordingly
@@ -485,10 +492,9 @@ class Driver:
             tricks.append(current_trick)
             tricks52.append(current_trick52)
 
-            if isinstance(card_players[player_i], bots.CardPlayer):
-                # Only declarer and dummy used PIMC
-                if self.models.use_pimc:
-                    card_players[1].pimc.reset_trick()
+            if self.models.pimc_use:
+                # Only declarer use PIMC
+                if isinstance(card_players[3], bots.CardPlayer):
                     card_players[3].pimc.reset_trick()
 
             # initializing for the next trick
@@ -532,10 +538,9 @@ class Driver:
             else:
                 card_players[1].n_tricks_taken += 1
                 card_players[3].n_tricks_taken += 1
-                if isinstance(card_players[player_i], bots.CardPlayer):
-                    if self.models.use_pimc:
-                        # Only declarer and dummy used PIMC
-                        card_players[1].pimc.update_trick_needed()
+                if self.models.pimc_use:
+                    # Only declarer use PIMC
+                    if isinstance(card_players[3], bots.CardPlayer):
                         card_players[3].pimc.update_trick_needed()
 
             if self.verbose:
@@ -780,7 +785,7 @@ async def main():
             rdeal = random_deal(boardno)
 
             # example of to use a fixed deal
-            rdeal = ('T54.Q65.AKJ432.4 Q9.A3.T986.AKQ63 AK863.T982..T972 J72.KJ74.Q75.J85', 'W E-W')
+            rdeal = ('62.QT742.875.KJ3 .A98.KQ9432.Q742 AJT543.65.J.AT95 KQ987.KJ3.AT6.86', 'W E-W')
 
             print(f"Playing Board: {rdeal}")
             driver.set_deal(None, *rdeal, False, bidding_only=bidding_only)
