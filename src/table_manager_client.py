@@ -241,10 +241,10 @@ class TMClient:
                         "vuln": VULS_REVERSE[self.vuln_ns, self.vuln_ew],
                         "auction": [a for a in auction if a != "PAD_START"],
                         "conventions_ew": (
-                            "TWO_OVER_ONE" if self.seat in ["East","West"] else "TWO_OVER_ONE"
+                            "GAVIN_ADVANCED" if self.seat in ["East","West"] else "TWO_OVER_ONE"
                         ),
                         "conventions_ns": (
-                            "TWO_OVER_ONE" if self.seat in ["North","South"] else "TWO_OVER_ONE"
+                            "GAVIN_ADVANCED" if self.seat in ["North","South"] else "TWO_OVER_ONE"
                         ),
                     },
                 )
@@ -312,9 +312,9 @@ class TMClient:
                 "auction": [
                     a for a in auction if a != "PAD_START"
                 ],
-                "conventions_ew": ("DEFAULT" if self.seat in ["East","West"] else "SEF"),
+                "conventions_ew": ("GAVIN_ADVANCED" if self.seat in ["East","West"] else "DEFAULT"),
                 "conventions_ns": (
-                    "DEFAULT" if self.seat in ["North","South"] else "SEF"
+                    "GAVIN_ADVANCED" if self.seat in ["North","South"] else "DEFAULT"
                 ),
             }
             lead = await self.send_request_to_lia(
