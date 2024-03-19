@@ -10,8 +10,6 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 # This import is only to help PyInstaller when generating the executables
 import tensorflow as tf
 
-import uuid
-import shelve
 import time
 import datetime
 import asyncio
@@ -21,7 +19,6 @@ import game
 import human
 import conf
 import functools
-import os
 import numpy as np
 from websockets.exceptions import ConnectionClosedOK
 from sample import Sample
@@ -167,7 +164,7 @@ async def handler(websocket, path, board_no, seed):
         if random:
             #Just take a random"
             np.random.seed(board_number)
-            rdeal = game.random_deal(board_number)
+            rdeal = game.random_deal_board(board_number)
             # example of to use a fixed deal
             # rdeal = ('AK64.8642.Q32.Q6 9.QT973.AT5.KJ94 QT532.J5.KJ974.7 J87.AK.86.AT8532', 'W None')
             print(f"Board: {board_number} {rdeal}")
@@ -192,7 +189,7 @@ async def handler(websocket, path, board_no, seed):
     except ConnectionClosedOK  as ex:
         print('User left')
     except ValueError as e:
-        print("Error in configuration - typical the models do not match the configuration - include_system ")
+        print("Error in configuration - typical the models do not match the configuration.")
         print(e)
         sys.exit(0)
 
