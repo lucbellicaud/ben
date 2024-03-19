@@ -86,3 +86,4 @@ scripts/training/data/input-2024-02-20.bba
 scripts/training/data/SAYC-Version 7918.ben
 scripts/training/data/SAYC-Version 7918.pbn
 *.dat
+*.bak
