@@ -230,9 +230,13 @@ class TMClient:
                     },
                 )
                 bid = bid_resp["bid"].replace("P","PASS").replace("NT","N")
+                alert_text = bid_resp["alert"]["text"] if bid_resp["alert"]["artificial"] is True else None
+                print(bid_resp)
+                print(bid)
+                print(alert_text)
                 await asyncio.sleep(0.01)
                 auction.append(bid)
-                await self.send_own_bid(bid)
+                await self.send_own_bid(bid,alert=alert_text)
             else:
                 # just wait for the other player's bid
                 bid = await self.receive_bid_for(player_i)
@@ -280,7 +284,7 @@ class TMClient:
             return await self.receive_card_play_for(on_lead_i, 0)
         
     async def opening_lead_with_lia(self, auction):
-        contract = bidding.get_contract(auction)
+        contract = bidding.get_contract(auction, self.dealer_i, self.models)
         decl_i = bidding.get_decl_i(contract)
         on_lead_i = (decl_i + 1) % 4
         
@@ -620,7 +624,7 @@ class TMClient:
         msg_card = f'{seat} plays {card_symbol[::-1]}'
         await self.send_message(msg_card)
 
-    async def send_own_bid(self, bid):
+    async def send_own_bid(self, bid, alert : None|str = None):
         bid = bid.replace('N', 'NT')
         msg_bid = f'{SEATS[self.player_i]} bids {bid}'
         if bid == 'PASS':
@@ -629,8 +633,11 @@ class TMClient:
             msg_bid = f'{SEATS[self.player_i]} doubles'
         elif bid == 'XX':
             msg_bid = f'{SEATS[self.player_i]} redoubles'
-        
-        await self.send_message(msg_bid)
+        if alert is None :
+            await self.send_message(msg_bid)
+        else :
+            print("{} Alert. {}".format(msg_bid,alert))
+            await self.send_message("{} Alert. {}".format(msg_bid,alert))
 
     async def receive_card_play_for(self, player_i, trick_i):
         # We need to find out if it is dummy we are waiting for
@@ -664,8 +671,9 @@ class TMClient:
         await self.send_message(msg_ready)
         
         bid_resp = await self.receive_line()
+        print(bid_resp)
         bid_resp_parts = bid_resp.strip().split()
-
+        print(bid_resp_parts)
         assert bid_resp_parts[0] == SEATS[player_i]
 
         # This is to prevent the client failing, when receiving an alert
